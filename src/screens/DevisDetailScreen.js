@@ -5,7 +5,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, STATUS_COLORS } from '../theme/colors';
 import { updateDevisStatus } from '../services/firebase';
-import { saveDevisLocal } from '../services/storage';
+import { saveDevisLocal, getClients, saveClient } from '../services/storage';
 import { FIREBASE_CONFIGURED } from '../../firebase.config';
 
 function InfoRow({ label, value }) {
@@ -18,9 +18,50 @@ function InfoRow({ label, value }) {
   );
 }
 
+async function findOrCreateClient(devis, date) {
+  const clients = await getClients();
+
+  // Cherche par email d'abord, puis par nom (insensible à la casse)
+  const match = clients.find((c) =>
+    (devis.email && c.email && c.email.toLowerCase() === devis.email.toLowerCase()) ||
+    c.nom.toLowerCase() === devis.nom.toLowerCase()
+  );
+
+  const devisNote = `Devis du ${date.toLocaleDateString('fr-FR')} : ${devis.service}${devis.appareil ? ` (${devis.appareil})` : ''}`;
+
+  if (match) {
+    // Client existant → on ajoute le devis à ses notes
+    const updated = {
+      ...match,
+      note: [match.note, devisNote].filter(Boolean).join('\n'),
+      // Met à jour email/tel si manquants
+      email: match.email || devis.email || '',
+      tel: match.tel || devis.tel || '',
+      updatedAt: new Date().toISOString(),
+    };
+    await saveClient(updated);
+    return { client: updated, isNew: false };
+  }
+
+  // Nouveau client → création automatique
+  const newClient = {
+    id: `client_${Date.now()}`,
+    nom: devis.nom,
+    email: devis.email || '',
+    tel: devis.tel || '',
+    adresse: '',
+    note: devisNote,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  await saveClient(newClient);
+  return { client: newClient, isNew: true };
+}
+
 export default function DevisDetailScreen({ route, navigation }) {
   const { devisId, devis: initialDevis } = route.params;
   const [devis, setDevis] = useState(initialDevis);
+  const [linkedClient, setLinkedClient] = useState(null);
 
   const date = devis.createdAt?.toDate
     ? devis.createdAt.toDate()
@@ -37,9 +78,30 @@ export default function DevisDetailScreen({ route, navigation }) {
   };
 
   const handleAccept = () => {
-    Alert.alert('Accepter ce devis ?', 'Le statut sera mis à jour.', [
+    Alert.alert('Accepter ce devis ?', 'Le statut sera mis à jour et le client sera créé ou mis à jour automatiquement.', [
       { text: 'Annuler', style: 'cancel' },
-      { text: 'Accepter', onPress: () => updateStatus('accepte') },
+      {
+        text: 'Accepter',
+        onPress: async () => {
+          await updateStatus('accepte');
+          const { client, isNew } = await findOrCreateClient(devis, date);
+          setLinkedClient(client);
+
+          if (isNew) {
+            Alert.alert(
+              '✓ Client créé',
+              `${client.nom} a été ajouté à tes clients avec ce devis en note.`,
+              [{ text: 'OK' }]
+            );
+          } else {
+            Alert.alert(
+              '✓ Client mis à jour',
+              `${client.nom} était déjà client. Le devis a été ajouté à sa fiche.`,
+              [{ text: 'OK' }]
+            );
+          }
+        },
+      },
     ]);
   };
 
@@ -48,10 +110,6 @@ export default function DevisDetailScreen({ route, navigation }) {
       { text: 'Annuler', style: 'cancel' },
       { text: 'Refuser', style: 'destructive', onPress: () => updateStatus('refuse') },
     ]);
-  };
-
-  const handleMarkRead = () => {
-    if (devis.status === 'nouveau') updateStatus('lu');
   };
 
   React.useEffect(() => {
@@ -122,15 +180,29 @@ export default function DevisDetailScreen({ route, navigation }) {
         )}
 
         {devis.status === 'accepte' && (
-          <TouchableOpacity
-            style={styles.rdvBtn}
-            onPress={() => navigation.navigate('Rendez-vous', {
-              screen: 'AddAppointment',
-              params: { clientNom: devis.nom },
-            })}
-          >
-            <Text style={styles.rdvBtnText}>📅 Créer un rendez-vous pour ce client</Text>
-          </TouchableOpacity>
+          <View style={styles.postAcceptActions}>
+            <TouchableOpacity
+              style={styles.rdvBtn}
+              onPress={() => navigation.navigate('Rendez-vous', {
+                screen: 'AddAppointment',
+                params: {
+                  clientId: linkedClient?.id,
+                  clientNom: linkedClient?.nom || devis.nom,
+                },
+              })}
+            >
+              <Text style={styles.rdvBtnText}>📅 Créer un rendez-vous</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.clientBtn}
+              onPress={() => navigation.navigate('Clients', {
+                screen: 'ClientsList',
+              })}
+            >
+              <Text style={styles.clientBtnText}>👤 Voir la fiche client</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -161,6 +233,9 @@ const styles = StyleSheet.create({
   acceptBtnText: { color: colors.green, fontWeight: '700', fontSize: 16 },
   refuseBtn: { backgroundColor: 'rgba(255,71,87,0.1)', borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: colors.red },
   refuseBtnText: { color: colors.red, fontWeight: '600', fontSize: 15 },
+  postAcceptActions: { gap: 10 },
   rdvBtn: { backgroundColor: colors.purpleFade, borderRadius: 12, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: colors.purple },
   rdvBtnText: { color: colors.purple, fontWeight: '700', fontSize: 15 },
+  clientBtn: { backgroundColor: colors.bgCard, borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
+  clientBtnText: { color: colors.gray, fontWeight: '600', fontSize: 14 },
 });
