@@ -20,6 +20,22 @@ function InfoRow({ icon, label, value, onPress }) {
   );
 }
 
+function DevisHistoChip({ devis }) {
+  const date = new Date(devis.date);
+  return (
+    <View style={styles.devisChip}>
+      <View style={styles.devisChipHead}>
+        <Text style={styles.devisChipService}>{devis.service}</Text>
+        <Text style={styles.devisChipDate}>
+          {date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+        </Text>
+      </View>
+      {devis.appareil ? <Text style={styles.devisChipAppareil}>📱 {devis.appareil}</Text> : null}
+      {devis.message ? <Text style={styles.devisChipMsg} numberOfLines={2}>{devis.message}</Text> : null}
+    </View>
+  );
+}
+
 function RdvChip({ rdv }) {
   const date = new Date(rdv.date);
   return (
@@ -90,6 +106,18 @@ export default function ClientDetailScreen({ route, navigation }) {
           </View>
         ) : null}
 
+        {client.devisHistorique?.length > 0 && (
+          <>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Historique des devis ({client.devisHistorique.length})</Text>
+            </View>
+            {client.devisHistorique
+              .slice()
+              .sort((a, b) => new Date(b.date) - new Date(a.date))
+              .map((d) => <DevisHistoChip key={d.id} devis={d} />)}
+          </>
+        )}
+
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Rendez-vous ({rdvs.length})</Text>
           <TouchableOpacity
@@ -142,6 +170,12 @@ const styles = StyleSheet.create({
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   sectionTitle: { fontSize: 14, fontWeight: '700', color: colors.gray, textTransform: 'uppercase', letterSpacing: 0.5 },
   sectionAdd: { color: colors.purple, fontWeight: '600', fontSize: 14 },
+  devisChip: { backgroundColor: colors.bgCard, borderRadius: 10, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: colors.border, borderLeftWidth: 3, borderLeftColor: colors.green },
+  devisChipHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  devisChipService: { fontSize: 14, fontWeight: '700', color: colors.white, flex: 1, marginRight: 8 },
+  devisChipDate: { fontSize: 11, color: colors.gray },
+  devisChipAppareil: { fontSize: 12, color: colors.blue, marginBottom: 4 },
+  devisChipMsg: { fontSize: 12, color: colors.gray, lineHeight: 17 },
   rdvChip: {
     backgroundColor: colors.bgCard, borderRadius: 10, padding: 14, marginBottom: 8,
     borderLeftWidth: 3, borderWidth: 1, borderTopColor: colors.border, borderRightColor: colors.border, borderBottomColor: colors.border,

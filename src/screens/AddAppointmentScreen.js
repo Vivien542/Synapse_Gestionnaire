@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { getClients, saveRdv } from '../services/storage';
+import { Calendar, TimeSlots, startOfDay } from '../components/DateTimePicker';
 
 const SERVICES = [
   'Réparation téléphone',
@@ -15,36 +16,34 @@ const SERVICES = [
   'Autre',
 ];
 
-function Field({ label, value, onChangeText, placeholder, keyboardType, required }) {
-  return (
-    <View style={styles.field}>
-      <Text style={styles.label}>{label}{required && <Text style={{ color: colors.purple }}> *</Text>}</Text>
-      <TextInput
-        style={styles.input}
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={colors.grayDark}
-        keyboardType={keyboardType || 'default'}
-      />
-    </View>
-  );
+const DUREES = [
+  { label: '30 min', value: '30' },
+  { label: '1 h', value: '60' },
+  { label: '1 h 30', value: '90' },
+  { label: '2 h', value: '120' },
+];
+
+function formatDateLong(d) {
+  return d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
 export default function AddAppointmentScreen({ route, navigation }) {
   const prefillClientId = route.params?.clientId;
   const prefillClientNom = route.params?.clientNom;
+  const prefillService = route.params?.service;
+  const prefillNote = route.params?.note;
 
   const [clients, setClients] = useState([]);
   const [clientId, setClientId] = useState(prefillClientId || '');
   const [clientNom, setClientNom] = useState(prefillClientNom || '');
   const [showClientPicker, setShowClientPicker] = useState(false);
-  const [service, setService] = useState('');
+  const [service, setService] = useState(prefillService || '');
   const [showServicePicker, setShowServicePicker] = useState(false);
-  const [date, setDate] = useState('');
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [showCalendar, setShowCalendar] = useState(false);
   const [heure, setHeure] = useState('');
   const [duree, setDuree] = useState('60');
-  const [note, setNote] = useState('');
+  const [note, setNote] = useState(prefillNote || '');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -54,13 +53,12 @@ export default function AddAppointmentScreen({ route, navigation }) {
   const handleSave = async () => {
     if (!clientId) { Alert.alert('Champ requis', 'Sélectionne un client'); return; }
     if (!service) { Alert.alert('Champ requis', 'Choisis un service'); return; }
-    if (!date.trim()) { Alert.alert('Champ requis', 'La date est obligatoire (JJ/MM/AAAA)'); return; }
-    if (!heure.trim()) { Alert.alert('Champ requis', "L'heure est obligatoire (HH:MM)"); return; }
+    if (!selectedDate) { Alert.alert('Champ requis', 'Choisis une date'); return; }
+    if (!heure) { Alert.alert('Champ requis', 'Choisis une heure'); return; }
 
-    const [day, month, year] = date.split('/');
     const [h, m] = heure.split(':');
-    const dateObj = new Date(year, month - 1, day, h, m);
-    if (isNaN(dateObj.getTime())) { Alert.alert('Date invalide', 'Format attendu : JJ/MM/AAAA et HH:MM'); return; }
+    const dateObj = new Date(selectedDate);
+    dateObj.setHours(parseInt(h, 10), parseInt(m, 10), 0, 0);
 
     setSaving(true);
     const rdv = {
@@ -131,7 +129,7 @@ export default function AddAppointmentScreen({ route, navigation }) {
             </TouchableOpacity>
             {showServicePicker && (
               <View style={styles.pickerDropdown}>
-                {SERVICES.map((s) => (
+                {(SERVICES.includes(service) || !service ? SERVICES : [service, ...SERVICES]).map((s) => (
                   <TouchableOpacity
                     key={s}
                     style={styles.pickerOption}
@@ -144,9 +142,50 @@ export default function AddAppointmentScreen({ route, navigation }) {
             )}
           </View>
 
-          <Field label="Date" value={date} onChangeText={setDate} placeholder="JJ/MM/AAAA" keyboardType="numeric" required />
-          <Field label="Heure" value={heure} onChangeText={setHeure} placeholder="HH:MM" keyboardType="numeric" required />
-          <Field label="Durée (minutes)" value={duree} onChangeText={setDuree} placeholder="60" keyboardType="numeric" />
+          {/* Date — calendrier */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Date <Text style={{ color: colors.purple }}>*</Text></Text>
+            <TouchableOpacity style={styles.picker} onPress={() => setShowCalendar(!showCalendar)}>
+              <Text style={selectedDate ? styles.pickerValue : styles.pickerPlaceholder}>
+                {selectedDate ? formatDateLong(selectedDate) : 'Choisir une date…'}
+              </Text>
+              <Text style={styles.pickerArrow}>{showCalendar ? '▲' : '▼'}</Text>
+            </TouchableOpacity>
+            {showCalendar && (
+              <View style={{ marginTop: 8 }}>
+                <Calendar
+                  value={selectedDate}
+                  minDate={startOfDay(new Date())}
+                  onSelect={(d) => { setSelectedDate(d); setShowCalendar(false); }}
+                />
+              </View>
+            )}
+          </View>
+
+          {/* Heure — créneaux */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Heure <Text style={{ color: colors.purple }}>*</Text></Text>
+            <TimeSlots value={heure} onSelect={setHeure} />
+          </View>
+
+          {/* Durée — chips */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Durée</Text>
+            <View style={styles.dureeRow}>
+              {DUREES.map((d) => {
+                const active = d.value === duree;
+                return (
+                  <TouchableOpacity
+                    key={d.value}
+                    style={[styles.dureeChip, active && styles.dureeChipActive]}
+                    onPress={() => setDuree(d.value)}
+                  >
+                    <Text style={[styles.dureeText, active && styles.dureeTextActive]}>{d.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
 
           <View style={styles.field}>
             <Text style={styles.label}>Notes</Text>
@@ -190,6 +229,11 @@ const styles = StyleSheet.create({
   pickerOption: { padding: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
   pickerOptionText: { color: colors.white, fontSize: 14 },
   pickerEmpty: { padding: 14, color: colors.gray, fontStyle: 'italic' },
+  dureeRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  dureeChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
+  dureeChipActive: { backgroundColor: colors.purpleFade, borderColor: colors.purple },
+  dureeText: { color: colors.gray, fontSize: 14, fontWeight: '600' },
+  dureeTextActive: { color: colors.purple, fontWeight: '700' },
   saveBtn: { backgroundColor: colors.purple, borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 8 },
   saveBtnText: { color: colors.white, fontWeight: '700', fontSize: 16 },
 });

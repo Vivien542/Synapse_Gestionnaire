@@ -51,6 +51,7 @@ export default function AddClientScreen({ route, navigation }) {
       tel: tel.trim(),
       adresse: adresse.trim(),
       note: note.trim(),
+      devisHistorique: existing?.devisHistorique || [],
       createdAt: existing?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -92,7 +93,7 @@ export default function AddClientScreen({ route, navigation }) {
           <Field label="Email" value={email} onChangeText={setEmail} placeholder="email@exemple.com" keyboardType="email-address" />
           <Field label="Téléphone" value={tel} onChangeText={setTel} placeholder="06 xx xx xx xx" keyboardType="phone-pad" />
           <Field label="Adresse" value={adresse} onChangeText={setAdresse} placeholder="Adresse (optionnel)" />
-          <Field label="Notes" value={note} onChangeText={setNote} placeholder="Notes internes, historique…" multiline />
+          <Field label="Notes" value={note} onChangeText={setNote} placeholder="Notes internes sur ce client…" multiline />
 
           <TouchableOpacity
             style={[styles.saveBtn, saving && { opacity: 0.6 }]}

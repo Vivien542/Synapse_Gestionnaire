@@ -6,6 +6,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, STATUS_COLORS } from '../theme/colors';
 import { updateDevisStatus } from '../services/firebase';
 import { saveDevisLocal, getClients, saveClient } from '../services/storage';
+
+// Retrouve un client déjà enregistré correspondant à ce devis (email puis nom)
+async function findClient(devis) {
+  const clients = await getClients();
+  return clients.find((c) =>
+    (devis.email && c.email && c.email.toLowerCase() === devis.email.toLowerCase()) ||
+    c.nom.toLowerCase() === devis.nom.toLowerCase()
+  ) || null;
+}
 import { FIREBASE_CONFIGURED } from '../../firebase.config';
 
 function InfoRow({ label, value }) {
@@ -19,21 +28,25 @@ function InfoRow({ label, value }) {
 }
 
 async function findOrCreateClient(devis, date) {
-  const clients = await getClients();
-
   // Cherche par email d'abord, puis par nom (insensible à la casse)
-  const match = clients.find((c) =>
-    (devis.email && c.email && c.email.toLowerCase() === devis.email.toLowerCase()) ||
-    c.nom.toLowerCase() === devis.nom.toLowerCase()
-  );
+  const match = await findClient(devis);
 
-  const devisNote = `Devis du ${date.toLocaleDateString('fr-FR')} : ${devis.service}${devis.appareil ? ` (${devis.appareil})` : ''}`;
+  // Entrée d'historique de devis — stockée à part des notes libres du client
+  const devisEntry = {
+    id: devis.id || `devis_${Date.now()}`,
+    date: date.toISOString(),
+    service: devis.service || '',
+    appareil: devis.appareil || '',
+    message: devis.message || '',
+  };
 
   if (match) {
-    // Client existant → on ajoute le devis à ses notes
+    // Client existant → on ajoute le devis à son historique (pas à ses notes)
+    const historique = match.devisHistorique || [];
+    const dejaPresent = historique.some((d) => d.id === devisEntry.id);
     const updated = {
       ...match,
-      note: [match.note, devisNote].filter(Boolean).join('\n'),
+      devisHistorique: dejaPresent ? historique : [devisEntry, ...historique],
       // Met à jour email/tel si manquants
       email: match.email || devis.email || '',
       tel: match.tel || devis.tel || '',
@@ -50,7 +63,8 @@ async function findOrCreateClient(devis, date) {
     email: devis.email || '',
     tel: devis.tel || '',
     adresse: '',
-    note: devisNote,
+    note: '',
+    devisHistorique: [devisEntry],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -116,7 +130,24 @@ export default function DevisDetailScreen({ route, navigation }) {
     if (devis.status === 'nouveau') {
       updateStatus('lu');
     }
+    // Devis déjà accepté lors d'une visite précédente : on retrouve la fiche
+    // client liée pour pré-remplir un éventuel rendez-vous.
+    if (devis.status === 'accepte') {
+      findClient(devis).then((c) => c && setLinkedClient(c));
+    }
   }, []);
+
+  const goToCreateRdv = () => {
+    navigation.navigate('Rendez-vous', {
+      screen: 'AddAppointment',
+      params: {
+        clientId: linkedClient?.id,
+        clientNom: linkedClient?.nom || devis.nom,
+        service: devis.service,
+        note: devis.appareil ? `Appareil : ${devis.appareil}` : '',
+      },
+    });
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -181,16 +212,7 @@ export default function DevisDetailScreen({ route, navigation }) {
 
         {devis.status === 'accepte' && (
           <View style={styles.postAcceptActions}>
-            <TouchableOpacity
-              style={styles.rdvBtn}
-              onPress={() => navigation.navigate('Rendez-vous', {
-                screen: 'AddAppointment',
-                params: {
-                  clientId: linkedClient?.id,
-                  clientNom: linkedClient?.nom || devis.nom,
-                },
-              })}
-            >
+            <TouchableOpacity style={styles.rdvBtn} onPress={goToCreateRdv}>
               <Text style={styles.rdvBtnText}>📅 Créer un rendez-vous</Text>
             </TouchableOpacity>
 
