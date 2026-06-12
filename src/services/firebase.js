@@ -19,29 +19,29 @@ if (FIREBASE_CONFIGURED) {
   db = getFirestore(app);
 }
 
-// Écoute en temps réel les devis envoyés depuis le site
-export function subscribeToDevis(callback) {
+// Écoute en temps réel les demandes de devis envoyées depuis le site
+export function subscribeToDemandes(callback) {
   if (!db) {
     callback([]);
     return () => {};
   }
-  const q = query(collection(db, 'devis'), orderBy('createdAt', 'desc'));
+  const q = query(collection(db, 'demandes'), orderBy('createdAt', 'desc'));
   return onSnapshot(q, (snapshot) => {
-    const devis = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-    callback(devis);
+    const demandes = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    callback(demandes);
   });
 }
 
-// Met à jour le statut d'un devis
-export async function updateDevisStatus(id, status) {
+// Met à jour le statut d'une demande
+export async function updateDemandeStatus(id, status) {
   if (!db) return;
-  await updateDoc(doc(db, 'devis', id), { status });
+  await updateDoc(doc(db, 'demandes', id), { status });
 }
 
-// Ajoute un devis manuellement (depuis l'app)
-export async function addDevis(data) {
+// Ajoute une demande manuellement (depuis l'app)
+export async function addDemande(data) {
   if (!db) return;
-  await addDoc(collection(db, 'devis'), { ...data, createdAt: serverTimestamp() });
+  await addDoc(collection(db, 'demandes'), { ...data, createdAt: serverTimestamp() });
 }
 
 export { db };

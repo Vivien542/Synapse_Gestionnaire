@@ -10,19 +10,24 @@ import ClientDetailScreen from '../screens/ClientDetailScreen';
 import AddClientScreen from '../screens/AddClientScreen';
 import AppointmentsScreen from '../screens/AppointmentsScreen';
 import AddAppointmentScreen from '../screens/AddAppointmentScreen';
-import DevisScreen from '../screens/DevisScreen';
+import DemandesScreen from '../screens/DemandesScreen';
+import DemandeDetailScreen from '../screens/DemandeDetailScreen';
+import DevisListScreen from '../screens/DevisListScreen';
 import DevisDetailScreen from '../screens/DevisDetailScreen';
+import CreateDevisScreen from '../screens/CreateDevisScreen';
 
 const Tab = createBottomTabNavigator();
 const ClientStack = createStackNavigator();
 const RdvStack = createStackNavigator();
+const DemandesStack = createStackNavigator();
 const DevisStack = createStackNavigator();
 
 const TAB_ICON = {
   Dashboard: '⬡',
+  Demandes: '📩',
+  Devis: '🧾',
   Clients: '👤',
   'Rendez-vous': '📅',
-  Devis: '📩',
 };
 
 function TabIcon({ name, focused, badgeCount }) {
@@ -61,16 +66,26 @@ function RdvNavigator() {
   );
 }
 
+function DemandesNavigator() {
+  return (
+    <DemandesStack.Navigator screenOptions={{ headerShown: false }}>
+      <DemandesStack.Screen name="DemandesList" component={DemandesScreen} />
+      <DemandesStack.Screen name="DemandeDetail" component={DemandeDetailScreen} />
+    </DemandesStack.Navigator>
+  );
+}
+
 function DevisNavigator() {
   return (
     <DevisStack.Navigator screenOptions={{ headerShown: false }}>
-      <DevisStack.Screen name="DevisList" component={DevisScreen} />
+      <DevisStack.Screen name="DevisList" component={DevisListScreen} />
       <DevisStack.Screen name="DevisDetail" component={DevisDetailScreen} />
+      <DevisStack.Screen name="CreateDevis" component={CreateDevisScreen} />
     </DevisStack.Navigator>
   );
 }
 
-export default function AppNavigator({ newDevisCount }) {
+export default function AppNavigator({ newDemandesCount }) {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -88,15 +103,16 @@ export default function AppNavigator({ newDevisCount }) {
           <TabIcon
             name={route.name}
             focused={focused}
-            badgeCount={route.name === 'Devis' ? newDevisCount : 0}
+            badgeCount={route.name === 'Demandes' ? newDemandesCount : 0}
           />
         ),
       })}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
+      <Tab.Screen name="Demandes" component={DemandesNavigator} />
+      <Tab.Screen name="Devis" component={DevisNavigator} />
       <Tab.Screen name="Clients" component={ClientsNavigator} />
       <Tab.Screen name="Rendez-vous" component={RdvNavigator} />
-      <Tab.Screen name="Devis" component={DevisNavigator} />
     </Tab.Navigator>
   );
 }

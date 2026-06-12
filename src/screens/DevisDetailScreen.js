@@ -1,153 +1,65 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, Linking, Alert,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { colors, STATUS_COLORS } from '../theme/colors';
-import { updateDevisStatus } from '../services/firebase';
-import { saveDevisLocal, getClients, saveClient } from '../services/storage';
+import { getDevis, saveDevis, addHistorique } from '../services/storage';
 
-// Retrouve un client déjà enregistré correspondant à ce devis (email puis nom)
-async function findClient(devis) {
-  const clients = await getClients();
-  return clients.find((c) =>
-    (devis.email && c.email && c.email.toLowerCase() === devis.email.toLowerCase()) ||
-    c.nom.toLowerCase() === devis.nom.toLowerCase()
-  ) || null;
-}
-import { FIREBASE_CONFIGURED } from '../../firebase.config';
-
-function InfoRow({ label, value }) {
-  if (!value) return null;
-  return (
-    <View style={styles.infoRow}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      <Text style={styles.infoValue}>{value}</Text>
-    </View>
-  );
-}
-
-async function findOrCreateClient(devis, date) {
-  // Cherche par email d'abord, puis par nom (insensible à la casse)
-  const match = await findClient(devis);
-
-  // Entrée d'historique de devis — stockée à part des notes libres du client
-  const devisEntry = {
-    id: devis.id || `devis_${Date.now()}`,
-    date: date.toISOString(),
-    service: devis.service || '',
-    appareil: devis.appareil || '',
-    message: devis.message || '',
-  };
-
-  if (match) {
-    // Client existant → on ajoute le devis à son historique (pas à ses notes)
-    const historique = match.devisHistorique || [];
-    const dejaPresent = historique.some((d) => d.id === devisEntry.id);
-    const updated = {
-      ...match,
-      devisHistorique: dejaPresent ? historique : [devisEntry, ...historique],
-      // Met à jour email/tel si manquants
-      email: match.email || devis.email || '',
-      tel: match.tel || devis.tel || '',
-      updatedAt: new Date().toISOString(),
-    };
-    await saveClient(updated);
-    return { client: updated, isNew: false };
-  }
-
-  // Nouveau client → création automatique
-  const newClient = {
-    id: `client_${Date.now()}`,
-    nom: devis.nom,
-    email: devis.email || '',
-    tel: devis.tel || '',
-    adresse: '',
-    note: '',
-    devisHistorique: [devisEntry],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  await saveClient(newClient);
-  return { client: newClient, isNew: true };
+function formatEuro(n) {
+  return `${(n || 0).toFixed(2).replace('.', ',')} €`;
 }
 
 export default function DevisDetailScreen({ route, navigation }) {
-  const { devisId, devis: initialDevis } = route.params;
-  const [devis, setDevis] = useState(initialDevis);
-  const [linkedClient, setLinkedClient] = useState(null);
+  const { devisId } = route.params;
+  const [devis, setDevis] = useState(null);
 
-  const date = devis.createdAt?.toDate
-    ? devis.createdAt.toDate()
-    : new Date(devis.createdAt || Date.now());
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    getDevis().then((list) => {
+      if (!active) return;
+      const found = list.find((d) => d.id === devisId);
+      if (found) setDevis(found);
+      else navigation.goBack();
+    });
+    return () => { active = false; };
+  }, [devisId]));
 
-  const updateStatus = async (status) => {
-    const updated = { ...devis, status };
-    if (FIREBASE_CONFIGURED) {
-      await updateDevisStatus(devisId, status);
-    } else {
-      await saveDevisLocal(updated);
-    }
+  if (!devis) return <SafeAreaView style={styles.safe} />;
+
+  const date = new Date(devis.createdAt);
+
+  const changeStatut = async (statut, type, label) => {
+    const updated = await saveDevis({ ...devis, statut });
     setDevis(updated);
+    await addHistorique(updated.clientId, {
+      type,
+      label: `${label} — ${formatEuro(updated.total)}`,
+      data: { devisId: updated.id, total: updated.total },
+    });
   };
 
-  const handleAccept = () => {
-    Alert.alert('Accepter ce devis ?', 'Le statut sera mis à jour et le client sera créé ou mis à jour automatiquement.', [
+  const confirmRefuse = () => {
+    Alert.alert('Marquer ce devis comme refusé ?', 'Le client a décliné ce devis.', [
       { text: 'Annuler', style: 'cancel' },
-      {
-        text: 'Accepter',
-        onPress: async () => {
-          await updateStatus('accepte');
-          const { client, isNew } = await findOrCreateClient(devis, date);
-          setLinkedClient(client);
-
-          if (isNew) {
-            Alert.alert(
-              '✓ Client créé',
-              `${client.nom} a été ajouté à tes clients avec ce devis en note.`,
-              [{ text: 'OK' }]
-            );
-          } else {
-            Alert.alert(
-              '✓ Client mis à jour',
-              `${client.nom} était déjà client. Le devis a été ajouté à sa fiche.`,
-              [{ text: 'OK' }]
-            );
-          }
-        },
-      },
+      { text: 'Refusé', style: 'destructive', onPress: () => changeStatut('refuse', 'devis_refuse', 'Devis refusé') },
     ]);
   };
 
-  const handleRefuse = () => {
-    Alert.alert('Refuser ce devis ?', 'Le statut sera mis à jour.', [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Refuser', style: 'destructive', onPress: () => updateStatus('refuse') },
-    ]);
-  };
-
-  React.useEffect(() => {
-    if (devis.status === 'nouveau') {
-      updateStatus('lu');
-    }
-    // Devis déjà accepté lors d'une visite précédente : on retrouve la fiche
-    // client liée pour pré-remplir un éventuel rendez-vous.
-    if (devis.status === 'accepte') {
-      findClient(devis).then((c) => c && setLinkedClient(c));
-    }
-  }, []);
-
-  const goToCreateRdv = () => {
+  const createRdv = () => {
     navigation.navigate('Rendez-vous', {
       screen: 'AddAppointment',
       params: {
-        clientId: linkedClient?.id,
-        clientNom: linkedClient?.nom || devis.nom,
-        service: devis.service,
-        note: devis.appareil ? `Appareil : ${devis.appareil}` : '',
+        clientId: devis.clientId,
+        clientNom: devis.clientNom,
+        service: devis.lignes?.[0]?.label || '',
+        note: `Devis ${formatEuro(devis.total)}`,
       },
     });
   };
+
+  const editable = devis.statut === 'brouillon' || devis.statut === 'envoye';
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -155,77 +67,79 @@ export default function DevisDetailScreen({ route, navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.back}>‹ Devis</Text>
         </TouchableOpacity>
-        <View style={[styles.badge, { backgroundColor: STATUS_COLORS[devis.status] + '22' }]}>
-          <Text style={[styles.badgeText, { color: STATUS_COLORS[devis.status] }]}>{devis.status}</Text>
+        <View style={[styles.badge, { backgroundColor: STATUS_COLORS[devis.statut] + '22' }]}>
+          <Text style={[styles.badgeText, { color: STATUS_COLORS[devis.statut] }]}>{devis.statut}</Text>
         </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
         <View style={styles.profileCard}>
-          <Text style={styles.nom}>{devis.nom}</Text>
+          <Text style={styles.client}>{devis.clientNom}</Text>
           <Text style={styles.dateText}>
-            Reçu le {date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            Créé le {date.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
           </Text>
-          <View style={styles.contactBtns}>
-            {devis.email ? (
-              <TouchableOpacity
-                style={styles.contactBtn}
-                onPress={() => Linking.openURL(`mailto:${devis.email}?subject=Votre demande de devis — ${devis.service}`)}
-              >
-                <Text style={styles.contactBtnText}>✉️ Répondre par email</Text>
-              </TouchableOpacity>
-            ) : null}
-            {devis.tel ? (
-              <TouchableOpacity
-                style={[styles.contactBtn, { borderColor: colors.green }]}
-                onPress={() => Linking.openURL(`tel:${devis.tel}`)}
-              >
-                <Text style={[styles.contactBtnText, { color: colors.green }]}>📞 Appeler</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Informations</Text>
-          <InfoRow label="Service" value={devis.service} />
-          <InfoRow label="Appareil" value={devis.appareil} />
-          <InfoRow label="Email" value={devis.email} />
-          <InfoRow label="Téléphone" value={devis.tel} />
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Message</Text>
-          <Text style={styles.message}>{devis.message}</Text>
-        </View>
-
-        {devis.status !== 'accepte' && devis.status !== 'refuse' && (
-          <View style={styles.actions}>
-            <TouchableOpacity style={styles.acceptBtn} onPress={handleAccept}>
-              <Text style={styles.acceptBtnText}>✓ Accepter ce devis</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.refuseBtn} onPress={handleRefuse}>
-              <Text style={styles.refuseBtnText}>✗ Refuser</Text>
-            </TouchableOpacity>
+          <Text style={styles.cardTitle}>Prestations</Text>
+          {devis.lignes.map((l) => (
+            <View key={l.id} style={styles.ligneRow}>
+              <Text style={styles.ligneLabel}>{l.label || '—'}</Text>
+              <Text style={styles.lignePrix}>{formatEuro(l.prix)}</Text>
+            </View>
+          ))}
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>Total</Text>
+            <Text style={styles.totalValue}>{formatEuro(devis.total)}</Text>
           </View>
-        )}
+        </View>
 
-        {devis.status === 'accepte' && (
-          <View style={styles.postAcceptActions}>
-            <TouchableOpacity style={styles.rdvBtn} onPress={goToCreateRdv}>
+        {devis.note ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Note interne</Text>
+            <Text style={styles.note}>{devis.note}</Text>
+          </View>
+        ) : null}
+
+        <View style={styles.actions}>
+          {editable && (
+            <TouchableOpacity
+              style={styles.editBtn}
+              onPress={() => navigation.navigate('CreateDevis', { devis })}
+            >
+              <Text style={styles.editBtnText}>✎ Modifier</Text>
+            </TouchableOpacity>
+          )}
+
+          {devis.statut === 'brouillon' && (
+            <TouchableOpacity
+              style={styles.primaryBtn}
+              onPress={() => changeStatut('envoye', 'devis_envoye', 'Devis envoyé')}
+            >
+              <Text style={styles.primaryBtnText}>📤 Marquer comme envoyé</Text>
+            </TouchableOpacity>
+          )}
+
+          {devis.statut === 'envoye' && (
+            <View style={styles.row}>
+              <TouchableOpacity
+                style={[styles.acceptBtn, { flex: 1 }]}
+                onPress={() => changeStatut('accepte', 'devis_accepte', 'Devis accepté')}
+              >
+                <Text style={styles.acceptBtnText}>✓ Accepté</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.refuseBtn, { flex: 1 }]} onPress={confirmRefuse}>
+                <Text style={styles.refuseBtnText}>✗ Refusé</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {devis.statut === 'accepte' && (
+            <TouchableOpacity style={styles.rdvBtn} onPress={createRdv}>
               <Text style={styles.rdvBtnText}>📅 Créer un rendez-vous</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.clientBtn}
-              onPress={() => navigation.navigate('Clients', {
-                screen: 'ClientsList',
-              })}
-            >
-              <Text style={styles.clientBtnText}>👤 Voir la fiche client</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+          )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -239,25 +153,27 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
   scroll: { padding: 20, paddingBottom: 40 },
   profileCard: { backgroundColor: colors.bgCard, borderRadius: 12, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
-  nom: { fontSize: 22, fontWeight: '800', color: colors.white, marginBottom: 4 },
-  dateText: { fontSize: 12, color: colors.gray, marginBottom: 16, textTransform: 'capitalize' },
-  contactBtns: { flexDirection: 'row', gap: 10 },
-  contactBtn: { borderWidth: 1, borderColor: colors.blue, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 },
-  contactBtnText: { color: colors.blue, fontWeight: '600', fontSize: 13 },
+  client: { fontSize: 22, fontWeight: '800', color: colors.white, marginBottom: 4 },
+  dateText: { fontSize: 12, color: colors.gray, textTransform: 'capitalize' },
   card: { backgroundColor: colors.bgCard, borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.border },
   cardTitle: { fontSize: 12, fontWeight: '700', color: colors.gray, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12 },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
-  infoLabel: { fontSize: 13, color: colors.gray },
-  infoValue: { fontSize: 13, color: colors.white, fontWeight: '500', flex: 1, textAlign: 'right', marginLeft: 12 },
-  message: { fontSize: 15, color: colors.white, lineHeight: 22 },
-  actions: { gap: 10, marginBottom: 12 },
+  ligneRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
+  ligneLabel: { fontSize: 14, color: colors.white, flex: 1, marginRight: 12 },
+  lignePrix: { fontSize: 14, color: colors.white, fontWeight: '600' },
+  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, marginTop: 4 },
+  totalLabel: { fontSize: 14, color: colors.gray, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  totalValue: { fontSize: 22, fontWeight: '800', color: colors.white },
+  note: { fontSize: 15, color: colors.white, lineHeight: 22 },
+  actions: { gap: 10 },
+  row: { flexDirection: 'row', gap: 10 },
+  editBtn: { backgroundColor: colors.bgCard, borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
+  editBtnText: { color: colors.gray, fontWeight: '600', fontSize: 15 },
+  primaryBtn: { backgroundColor: colors.purpleFade, borderRadius: 12, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: colors.purple },
+  primaryBtnText: { color: colors.purple, fontWeight: '700', fontSize: 15 },
   acceptBtn: { backgroundColor: 'rgba(0,196,140,0.15)', borderRadius: 12, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: colors.green },
-  acceptBtnText: { color: colors.green, fontWeight: '700', fontSize: 16 },
-  refuseBtn: { backgroundColor: 'rgba(255,71,87,0.1)', borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: colors.red },
-  refuseBtnText: { color: colors.red, fontWeight: '600', fontSize: 15 },
-  postAcceptActions: { gap: 10 },
+  acceptBtnText: { color: colors.green, fontWeight: '700', fontSize: 15 },
+  refuseBtn: { backgroundColor: 'rgba(255,71,87,0.1)', borderRadius: 12, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: colors.red },
+  refuseBtnText: { color: colors.red, fontWeight: '700', fontSize: 15 },
   rdvBtn: { backgroundColor: colors.purpleFade, borderRadius: 12, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: colors.purple },
   rdvBtnText: { color: colors.purple, fontWeight: '700', fontSize: 15 },
-  clientBtn: { backgroundColor: colors.bgCard, borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
-  clientBtnText: { color: colors.gray, fontWeight: '600', fontSize: 14 },
 });

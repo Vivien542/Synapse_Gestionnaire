@@ -16,10 +16,17 @@ export const colors = {
 };
 
 export const STATUS_COLORS = {
-  nouveau: colors.cyan,
-  lu: colors.gray,
+  // Demandes (reçues du site)
+  nouvelle: colors.cyan,
+  lue: colors.gray,
+  acceptee: colors.green,
+  refusee: colors.red,
+  // Devis (créés dans l'app)
+  brouillon: colors.orange,
+  envoye: colors.blue,
   accepte: colors.green,
   refuse: colors.red,
+  // Rendez-vous
   planifie: colors.blue,
   termine: colors.green,
   annule: colors.red,

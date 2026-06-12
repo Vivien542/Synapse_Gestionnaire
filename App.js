@@ -13,15 +13,15 @@ import { StatusBar } from 'expo-status-bar';
 import { useState, useEffect, useRef } from 'react';
 import Constants from 'expo-constants';
 import AppNavigator from './src/navigation/AppNavigator';
-import { subscribeToDevis } from './src/services/firebase';
-import { requestNotificationPermission, sendDevisNotification, setBadgeCount } from './src/services/notifications';
+import { subscribeToDemandes } from './src/services/firebase';
+import { requestNotificationPermission, sendDemandeNotification, setBadgeCount } from './src/services/notifications';
 import { FIREBASE_CONFIGURED } from './firebase.config';
 import { colors } from './src/theme/colors';
 
 const IS_EXPO_GO = Constants.appOwnership === 'expo';
 
 export default function App() {
-  const [newDevisCount, setNewDevisCount] = useState(0);
+  const [newDemandesCount, setNewDemandesCount] = useState(0);
   const knownIdsRef = useRef(null);
   const navigationRef = useRef(null);
 
@@ -32,26 +32,26 @@ export default function App() {
   useEffect(() => {
     if (!FIREBASE_CONFIGURED) return;
 
-    const unsub = subscribeToDevis((devis) => {
-      const nouveaux = devis.filter((d) => d.status === 'nouveau');
-      setNewDevisCount(nouveaux.length);
-      if (!IS_EXPO_GO) setBadgeCount(nouveaux.length);
+    const unsub = subscribeToDemandes((demandes) => {
+      const nouvelles = demandes.filter((d) => d.status === 'nouvelle');
+      setNewDemandesCount(nouvelles.length);
+      if (!IS_EXPO_GO) setBadgeCount(nouvelles.length);
 
       if (knownIdsRef.current === null) {
-        knownIdsRef.current = new Set(devis.map((d) => d.id));
+        knownIdsRef.current = new Set(demandes.map((d) => d.id));
         return;
       }
 
       if (!IS_EXPO_GO) {
-        for (const d of nouveaux) {
+        for (const d of nouvelles) {
           if (!knownIdsRef.current.has(d.id)) {
-            sendDevisNotification(d);
+            sendDemandeNotification(d);
             knownIdsRef.current.add(d.id);
           }
         }
       }
 
-      devis.forEach((d) => knownIdsRef.current.add(d.id));
+      demandes.forEach((d) => knownIdsRef.current.add(d.id));
     });
 
     return unsub;
@@ -63,9 +63,9 @@ export default function App() {
     try {
       const Notifications = require('expo-notifications');
       sub = Notifications.addNotificationResponseReceivedListener((response) => {
-        const devisId = response.notification.request.content.data?.devisId;
-        if (devisId && navigationRef.current) {
-          navigationRef.current.navigate('Devis');
+        const demandeId = response.notification.request.content.data?.demandeId;
+        if (demandeId && navigationRef.current) {
+          navigationRef.current.navigate('Demandes');
         }
       });
     } catch {}
@@ -77,7 +77,7 @@ export default function App() {
       <SafeAreaProvider>
         <NavigationContainer ref={navigationRef}>
           <StatusBar style="light" backgroundColor={colors.bg} />
-          <AppNavigator newDevisCount={newDevisCount} />
+          <AppNavigator newDemandesCount={newDemandesCount} />
         </NavigationContainer>
       </SafeAreaProvider>
     </GestureHandlerRootView>

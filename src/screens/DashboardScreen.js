@@ -77,7 +77,7 @@ export default function DashboardScreen({ navigation }) {
         {!FIREBASE_CONFIGURED && (
           <View style={styles.banner}>
             <Text style={styles.bannerText}>
-              ⚡ Configure Firebase pour recevoir les devis du site en temps réel
+              ⚡ Configure Firebase pour recevoir les demandes du site en temps réel
             </Text>
           </View>
         )}
@@ -129,10 +129,10 @@ export default function DashboardScreen({ navigation }) {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.action}
-              onPress={() => navigation.navigate('Devis')}
+              onPress={() => navigation.navigate('Demandes')}
             >
               <Text style={styles.actionIcon}>📩</Text>
-              <Text style={styles.actionLabel}>Voir les devis</Text>
+              <Text style={styles.actionLabel}>Voir les demandes</Text>
             </TouchableOpacity>
           </View>
         </View>

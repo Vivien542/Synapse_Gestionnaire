@@ -4,74 +4,74 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, STATUS_COLORS } from '../theme/colors';
-import { subscribeToDevis } from '../services/firebase';
-import { getDevisLocal } from '../services/storage';
+import { subscribeToDemandes } from '../services/firebase';
+import { getDemandesLocal } from '../services/storage';
 import { FIREBASE_CONFIGURED } from '../../firebase.config';
 
-const FILTERS = ['tous', 'nouveau', 'lu', 'accepte', 'refuse'];
-const FILTER_LABELS = { tous: 'Tous', nouveau: 'Nouveaux', lu: 'Lus', accepte: 'Acceptés', refuse: 'Refusés' };
+const FILTERS = ['tous', 'nouvelle', 'lue', 'acceptee', 'refusee'];
+const FILTER_LABELS = { tous: 'Tous', nouvelle: 'Nouvelles', lue: 'Lues', acceptee: 'Acceptées', refusee: 'Refusées' };
 
-function DevisCard({ devis, onPress }) {
-  const date = devis.createdAt?.toDate
-    ? devis.createdAt.toDate()
-    : new Date(devis.createdAt || Date.now());
+function DemandeCard({ demande, onPress }) {
+  const date = demande.createdAt?.toDate
+    ? demande.createdAt.toDate()
+    : new Date(demande.createdAt || Date.now());
 
   return (
-    <TouchableOpacity style={[styles.card, devis.status === 'nouveau' && styles.cardNew]} onPress={onPress}>
+    <TouchableOpacity style={[styles.card, demande.status === 'nouvelle' && styles.cardNew]} onPress={onPress}>
       <View style={styles.cardTop}>
-        <View style={[styles.statusDot, { backgroundColor: STATUS_COLORS[devis.status] }]} />
+        <View style={[styles.statusDot, { backgroundColor: STATUS_COLORS[demande.status] }]} />
         <View style={{ flex: 1 }}>
-          <Text style={styles.cardNom}>{devis.nom}</Text>
-          <Text style={styles.cardService}>{devis.service}</Text>
+          <Text style={styles.cardNom}>{demande.nom}</Text>
+          <Text style={styles.cardService}>{demande.service}</Text>
         </View>
         <View style={styles.cardMeta}>
           <Text style={styles.cardDate}>
             {date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
           </Text>
-          <View style={[styles.badge, { backgroundColor: STATUS_COLORS[devis.status] + '22' }]}>
-            <Text style={[styles.badgeText, { color: STATUS_COLORS[devis.status] }]}>{devis.status}</Text>
+          <View style={[styles.badge, { backgroundColor: STATUS_COLORS[demande.status] + '22' }]}>
+            <Text style={[styles.badgeText, { color: STATUS_COLORS[demande.status] }]}>{demande.status}</Text>
           </View>
         </View>
       </View>
-      {devis.appareil ? <Text style={styles.cardAppareil}>📱 {devis.appareil}</Text> : null}
-      <Text style={styles.cardMsg} numberOfLines={2}>{devis.message}</Text>
+      {demande.appareil ? <Text style={styles.cardAppareil}>📱 {demande.appareil}</Text> : null}
+      <Text style={styles.cardMsg} numberOfLines={2}>{demande.message}</Text>
     </TouchableOpacity>
   );
 }
 
-export default function DevisScreen({ navigation }) {
-  const [devis, setDevis] = useState([]);
+export default function DemandesScreen({ navigation }) {
+  const [demandes, setDemandes] = useState([]);
   const [filter, setFilter] = useState('tous');
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (FIREBASE_CONFIGURED) {
-      const unsub = subscribeToDevis(setDevis);
+      const unsub = subscribeToDemandes(setDemandes);
       return unsub;
     } else {
-      getDevisLocal().then(setDevis);
+      getDemandesLocal().then(setDemandes);
     }
   }, []);
 
   const onRefresh = useCallback(async () => {
     if (!FIREBASE_CONFIGURED) {
       setRefreshing(true);
-      const local = await getDevisLocal();
-      setDevis(local);
+      const local = await getDemandesLocal();
+      setDemandes(local);
       setRefreshing(false);
     }
   }, []);
 
-  const nouveaux = devis.filter((d) => d.status === 'nouveau').length;
-  const filtered = devis.filter((d) => filter === 'tous' || d.status === filter);
+  const nouvelles = demandes.filter((d) => d.status === 'nouvelle').length;
+  const filtered = demandes.filter((d) => filter === 'tous' || d.status === filter);
 
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>Devis</Text>
-          {nouveaux > 0 && (
-            <Text style={styles.subtitle}>{nouveaux} nouveau{nouveaux > 1 ? 'x' : ''}</Text>
+          <Text style={styles.title}>Demandes</Text>
+          {nouvelles > 0 && (
+            <Text style={styles.subtitle}>{nouvelles} nouvelle{nouvelles > 1 ? 's' : ''}</Text>
           )}
         </View>
         {!FIREBASE_CONFIGURED && (
@@ -84,7 +84,7 @@ export default function DevisScreen({ navigation }) {
       {!FIREBASE_CONFIGURED && (
         <View style={styles.banner}>
           <Text style={styles.bannerText}>
-            Configure Firebase dans firebase.config.js pour recevoir les devis du site en temps réel.
+            Configure Firebase dans firebase.config.js pour recevoir les demandes du site en temps réel.
           </Text>
         </View>
       )}
@@ -98,7 +98,7 @@ export default function DevisScreen({ navigation }) {
           >
             <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
               {FILTER_LABELS[f]}
-              {f === 'nouveau' && nouveaux > 0 ? ` (${nouveaux})` : ''}
+              {f === 'nouvelle' && nouvelles > 0 ? ` (${nouvelles})` : ''}
             </Text>
           </TouchableOpacity>
         ))}
@@ -114,16 +114,16 @@ export default function DevisScreen({ navigation }) {
             : undefined
         }
         renderItem={({ item }) => (
-          <DevisCard devis={item} onPress={() => navigation.navigate('DevisDetail', { devisId: item.id, devis: item })} />
+          <DemandeCard demande={item} onPress={() => navigation.navigate('DemandeDetail', { demandeId: item.id, demande: item })} />
         )}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>📩</Text>
-            <Text style={styles.emptyTitle}>Aucun devis</Text>
+            <Text style={styles.emptyTitle}>Aucune demande</Text>
             <Text style={styles.emptyText}>
               {FIREBASE_CONFIGURED
-                ? 'Les devis du site apparaîtront ici en temps réel'
-                : 'Configure Firebase pour recevoir les devis automatiquement'}
+                ? 'Les demandes du site apparaîtront ici en temps réel'
+                : 'Configure Firebase pour recevoir les demandes automatiquement'}
             </Text>
           </View>
         }

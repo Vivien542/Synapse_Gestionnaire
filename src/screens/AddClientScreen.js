@@ -44,6 +44,16 @@ export default function AddClientScreen({ route, navigation }) {
       return;
     }
     setSaving(true);
+    const isNew = !existing;
+    const historique = existing?.historique || [];
+    if (isNew) {
+      historique.unshift({
+        id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        type: 'client_cree',
+        date: new Date().toISOString(),
+        label: 'Fiche client créée',
+      });
+    }
     const client = {
       id: existing?.id || `client_${Date.now()}`,
       nom: nom.trim(),
@@ -51,7 +61,7 @@ export default function AddClientScreen({ route, navigation }) {
       tel: tel.trim(),
       adresse: adresse.trim(),
       note: note.trim(),
-      devisHistorique: existing?.devisHistorique || [],
+      historique,
       createdAt: existing?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };

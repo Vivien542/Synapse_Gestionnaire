@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
-import { getClients, saveRdv } from '../services/storage';
+import { getClients, saveRdv, addHistorique } from '../services/storage';
 import { Calendar, TimeSlots, startOfDay } from '../components/DateTimePicker';
 
 const SERVICES = [
@@ -74,6 +74,16 @@ export default function AddAppointmentScreen({ route, navigation }) {
       createdAt: new Date().toISOString(),
     };
     await saveRdv(rdv);
+
+    // Trace le RDV dans l'historique du client concerné
+    if (clientId) {
+      await addHistorique(clientId, {
+        type: 'rdv_cree',
+        label: `Rendez-vous planifié — ${formatDateLong(selectedDate)} à ${heure}`,
+        data: { rdvId: rdv.id, service, date: rdv.date, heure },
+      });
+    }
+
     setSaving(false);
     navigation.goBack();
   };

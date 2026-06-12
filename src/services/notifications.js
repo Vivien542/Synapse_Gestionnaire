@@ -28,14 +28,14 @@ export async function requestNotificationPermission() {
   }
 }
 
-export async function sendDevisNotification(devis) {
+export async function sendDemandeNotification(demande) {
   if (IS_EXPO_GO) return;
   try {
     await Notifications.scheduleNotificationAsync({
       content: {
-        title: '📩 Nouveau devis reçu',
-        body: `${devis.nom} — ${devis.service}`,
-        data: { devisId: devis.id },
+        title: '📩 Nouvelle demande de devis',
+        body: `${demande.nom} — ${demande.service}`,
+        data: { demandeId: demande.id },
         sound: true,
       },
       trigger: null,
