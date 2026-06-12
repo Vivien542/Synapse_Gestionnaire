@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl,
+  View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, Alert,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
-import { getClients, getRdvs } from '../services/storage';
+import { getClients, getRdvs, clearLocalData } from '../services/storage';
 import { FIREBASE_CONFIGURED } from '../../firebase.config';
 
 function StatCard({ label, value, color, sub }) {
@@ -53,6 +53,24 @@ export default function DashboardScreen({ navigation }) {
     setRefreshing(true);
     await load();
     setRefreshing(false);
+  };
+
+  const handleReset = () => {
+    Alert.alert(
+      'Réinitialiser les données locales ?',
+      'Tous les clients, rendez-vous et devis enregistrés sur cet appareil seront définitivement supprimés. Les demandes du site (Firestore) ne sont pas concernées.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Tout supprimer', style: 'destructive',
+          onPress: async () => {
+            await clearLocalData();
+            await load();
+            Alert.alert('✓ Données réinitialisées', 'Clients, rendez-vous et devis locaux ont été effacés.');
+          },
+        },
+      ]
+    );
   };
 
   const now = new Date();
@@ -136,6 +154,10 @@ export default function DashboardScreen({ navigation }) {
             </TouchableOpacity>
           </View>
         </View>
+
+        <TouchableOpacity style={styles.resetBtn} onPress={handleReset}>
+          <Text style={styles.resetBtnText}>Réinitialiser les données locales</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -186,4 +208,6 @@ const styles = StyleSheet.create({
   },
   actionIcon: { fontSize: 24, marginBottom: 6 },
   actionLabel: { fontSize: 11, color: colors.gray, textAlign: 'center', fontWeight: '600' },
+  resetBtn: { marginTop: 28, alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 16 },
+  resetBtnText: { color: colors.grayDark, fontSize: 12, fontWeight: '600', textDecorationLine: 'underline' },
 });

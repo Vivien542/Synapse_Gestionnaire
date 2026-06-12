@@ -131,3 +131,10 @@ export async function saveDemandeLocal(demande) {
   else list.unshift(demande);
   await AsyncStorage.setItem(DEMANDES_KEY, JSON.stringify(list));
 }
+
+// ── RÉINITIALISATION ─────────────────────────────────────
+// Efface toutes les données locales (clients, RDV, devis, demandes locales).
+// Ne touche pas à Firestore.
+export async function clearLocalData() {
+  await AsyncStorage.multiRemove([KEYS.clients, KEYS.rdv, KEYS.devis, DEMANDES_KEY]);
+}
